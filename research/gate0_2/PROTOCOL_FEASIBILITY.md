@@ -1,20 +1,20 @@
 # PROTOCOL_FEASIBILITY.md — ZKQ-ARCH-01 Agent-bound Private Query 的 MPC 协议可行性判定
 
-**任务：** ZKQ-ARCH-01（独立研究分支，只读研究 + 新增一份报告）  
-**日期：** 2026-11-25  
-**仓库：** `kaikai-cao/ZK-Agent-Query-Binding`  
-**基线：** `research/g0-privacy-audience-correction` @ `524fc7a60afd4598c0940a34eb3ad9565a06565e`  
-**新分支：** `research/g0.2-architecture-feasibility`  
-**边界：** 不写代码，不改 G0/G0.1 文件，不新增 benchmark/demo，不进入 Gate 1，不声称完成形式化安全证明。  
-**最终决策：** **HOLD**。
+**任务：** ZKQ-ARCH-01（独立研究分支，只读研究 + 新增一份报告）；ZKQ-ARCH-01-R1（最后一次归档修正：补充协作证明先例并改判 NO-GO）
+**日期：** 2026-11-25
+**仓库：** `kaikai-cao/ZK-Agent-Query-Binding`
+**基线：** `research/g0-privacy-audience-correction` @ `524fc7a60afd4598c0940a34eb3ad9565a06565e`；归档修正起点 `research/g0.2-architecture-feasibility` @ `610eb8ede1f5724e513cda335235c7211832ac46`
+**新分支：** `research/g0.2-architecture-feasibility`
+**边界：** 不写代码，不改 G0/G0.1 文件，不新增 benchmark/demo，不进入 Gate 1，不声称完成形式化安全证明；本轮只修改本报告。
+**最终决策：** **NO-GO（仅针对当前 ZK-Agent Query Binding 提案作为独立密码学贡献）**。
 
 ---
 
 ## 0. 结论先行
 
-**HOLD：最小协议模型在结构上可行，但尚不能批准进入 Halo2 电路实现，也不能宣称已有独立密码学增量。**
+**NO-GO：原报告把 T1（秘密共享 witness 上的分布式公开可验证证明）列为唯一潜在新构造，但遗漏了三条直接先例：Collaborative zk-SNARKs、Authenticated MPC / DPoK、Collaborative CP-NIZKs。这三条工作已经分别覆盖 T1 的通用密码学核心。把 Grant、ACL、策略版本和快照语义放进电路并组合这些原语，当前不能构成独立密码学贡献。**
 
-本轮核查的六篇工作中：
+原报告核查的六篇应用 / 系统工作仍然说明：
 
 - Jain & Prabhakar 2013 与 SIGMOD'18 已覆盖“ACL 约束下的查询结果验证”，但服务端可见 ACL 元数据或策略；
 - QShield 已把 ACL 放入 enclave，并用硬件信任根提供执行轨迹证明，但查询明文可见、验证依赖 SGX；
@@ -22,11 +22,13 @@
 - TVA 已在诚实多数 MPC 中隐藏谓词值、时间区间和访问模式，恶意安全为 up-to-abort，但无 ACL 与公开第三方证明；
 - Gu et al. 2026 已把查询类型、谓词、请求属性、聚合函数、策略版本、数据库状态标识绑定进查询摘要，并用 nonce/counter 与法定人数授权证书处理重放和准入；但其服务器仍是 honest-but-curious，且 QC₂ 被原文明确限定为 result-confirmation certificate，**不是** verifiable-computation proof。
 
-因此，当前最值得继续检验的并不是“再加一层 ZK 查询证明”，而是一个更窄的问题：
+本轮补充核查后，原先所谓“唯一待判定的技术问题”已有直接通用先例：
 
-> 能否在**没有任何单一 Prover 重构完整 D、ACL 和私密查询参数**的前提下，由多个计算方联合产生一个外部 Verifier 可独立检查的证明，证明：外部签发的 Agent Grant 对应到 MPC 内部实际使用的秘密共享查询；该查询满足当前策略版本；结果是指定数据快照上的正确且完整结果？
+- **Ozdemir & Boneh, USENIX Security 2022**：多个互不信任的 Prover 各自持有 witness 份额，通过 MPC 联合运行 SNARK Prove，产生单一公开可验证证明；给出 Groth16 / Plonk / Marlin / Fractal 的协作适配，实际实现 Groth16 / Marlin / Plonk；并明确讨论 PA-MPC，外部审计者不参与 MPC 也可检查输出与各方输入承诺一致。
+- **Dutta et al., ASIACRYPT 2024**：把外部认证机构签名的输入绑定到 honest-majority 线性秘密共享 MPC 实际使用的份额，提出 DPoK 与通用输入认证编译器；Shamir 实例给出 `t < n/3` 的 robust 版本。
+- **Alghazwi et al., IJIS 2026**：给出 collaborative CP-NIZK、协作 Pedersen 类承诺与 `CPlink`，把证明内的 witness commitment 与外部承诺关联，并实现 collaborative LegoGro16 / CP-SNARK 与 collaborative Bulletproofs。
 
-若这个问题最终只是调用现有 publicly verifiable MPC / distributed proving，再把 Grant digest、policy epoch、snapshot root 放进公共输入，则应按 **NO-GO** 结案。当前证据不足以证明它可归因于一个新构造，也不足以证明它不可能，所以本轮判 **HOLD**。
+因此，当前提案作为**独立密码学贡献**判 **NO-GO**。这不是对“Agent 安全 + 密码学信任机制”整个研究方向的 NO-GO；SQL/ACL 电路规模、数据库语义和工程性能仍可能是系统研究问题，但本轮不把它们包装成新的密码学构造。
 
 ---
 
@@ -263,28 +265,73 @@ Proves:
 - 恶意服务器偏离协议时，要么被公开证明拒绝，要么产生可追责 abort；
 - 低熵查询参数不能因公开 `query_hash` 被字典攻击恢复。
 
-若该能力可由现有 publicly verifiable MPC / distributed proving 直接实例化，并通过工程参数证明可用，则它只是组件选择与组合，应判 **NO-GO**。若现有公开可验证 MPC 无法在不重构 witness 的前提下支持上述承诺一致性、ACL 谓词与完整性语句，而需要新的承诺格式、联合证明协议或新的安全定义，才构成 GO 候选。
+若该能力可由现有 publicly verifiable MPC / distributed proving 直接实例化，并通过工程参数证明可用，则它只是组件选择与组合，应判 **NO-GO**。若现有公开可验证 MPC 无法在不重构 witness 的前提下支持上述承诺一致性、ACL 谓词与完整性语句，而需要新的承诺格式、联合证明协议或新的安全定义，才构成 GO 候选。**ARCH-01-R1 补充核查表明：§9.1 的三项先例已分别覆盖该能力的核心子问题，本报告据此落入前一种情况，最终判 NO-GO。**
 
 ### T2. 实际访问约束的协议语义
 
 如果所有查询操作都在数据无关 MPC 内完成，服务器看不到访问模式；如果服务器仍持有可自行访问的外包存储，则结果证明无法证明它没有额外读取。必须先固定架构语义，否则“没有额外读取”是无法判定的口号。这是**模型定义问题**，本身不是新原语；模型定义错误会使任何 GO 声明失效。
 
+### 9.1 补充先例：协作证明与认证输入绑定（ARCH-01-R1）
+
+原报告把 T1 当作“尚未被六篇应用工作直接覆盖”的候选新构造。归档修正补入以下三项通用密码学先例；它们不是 Agent / ACL / SQL 系统，但已经覆盖 T1 的通用技术核心。
+
+#### A. Collaborative zk-SNARKs（Ozdemir & Boneh, USENIX Security 2022）
+
+- **实际解决的问题**：把单 Prover SNARK 提升为多个互不信任 Prover 对分布式 witness 联合生成单一公开可验证证明。原文 §1：「public proofs about a secret ⃗w = (w1,...,wN) distributed among N parties」；§1「run its proof generation algorithm as a secure multi-party computation (MPC) among the N provers」。
+- **证明者结构与信息边界**：每个 Prover 只持有 `w_i`，不向其他 Prover 或公众泄露各自秘密；联合 Prove 通过 MPC 完成，不要求单方重构完整 witness。
+- **恶意参与者与 abort**：原文 §1 明确「any prover can choose not to participate in the MPC, thereby preventing the proof from being generated」；因此使用「MPC-with-aborts」，不保证输出交付。Theorem 1：底层 Prove 的 MPC 若为 secure-with-abort against up to `t` corruptions，则协作 SNARK 对 `t` 个恶意 Prover 安全。
+- **覆盖的 SNARK 与公开验证**：§1 适配 Groth16、Marlin、Plonk、Fractal，实际实现 Groth16 / Marlin / Plonk；§4.1 PA-MPC 给出公开可验证证明，「auditor need not participate in this computation, yet it can still check that the claimed output is consistent with commitments to the inputs」。
+- **对 T1 的直接影响**：T1 中「不重构完整 witness 的联合证明」与「外部公开验证」两个子问题已有通用原语和实测实现；再把这些机制用于本提案属于选择现成组件。
+- **仍未解决的应用边界**：论文没有 Agent Grant、ACL 策略语义、SQL 查询 operator、快照版本或数据库承诺格式；不能据此声称已有现成的 Agent 数据库系统。
+
+#### B. Authenticated MPC / DPoK（Dutta et al., ASIACRYPT 2024）
+
+- **实际解决的问题**：研究外部认证机构签名的输入如何实际用于 MPC，避免「认证了一组输入、执行时替换另一组」。官方摘要页明确：「a notion of authenticated MPC where the inputs are authenticated, e.g., signed using a digital signature by some certification authority」；并提出「distributed proofs of knowledge」与「a generic and efficient compiler that transforms any linear secret sharing based honest-majority MPC protocol into one with input authentication」。
+- **证明者结构与信息边界**：针对 threshold linear secret sharing 的 honest-majority MPC；编译后把外部认证输入与实际参与 MPC 的秘密份额绑定。摘要还说明对底层 identifiable abort 性质的保留。
+- **恶意参与者与 abort**：诚实多数、with-abort / identifiable-abort 安全；任务包给出的 Shamir 实例 robust 版本为 `t < n/3`。本机对 ePrint PDF 直下请求返回 403，故该具体阈值按任务包给定事实记录，报告不声称已逐行核验 PDF 正文。
+- **公开验证性**：这是协议内/参与方视角的输入认证与知识证明，不等同于外部 Verifier 对 SQL 结果的公开可验证证明；公开可验证性仍需协作证明类原语。
+- **对 T1 的直接影响**：T1 中「Grant / 认证输入 ↔ MPC 实际秘密份额」的绑定已有直接通用机制；Grant 的具体字段格式仍需适配，但这不是新的密码学原语。
+- **仍未解决的应用边界**：使用 BBS+、PS 等具体代数签名方案；不是 Agent 授权系统，不证明 ACL 行级强制、SQL 结果完整性或快照语义。
+
+#### C. Collaborative CP-NIZKs（Alghazwi et al., IJIS 2026）
+
+- **实际解决的问题**：分布式 witness 持有者联合产生公开可验证 CP-NIZK，并把证明中的 witness commitment 与外部承诺关联。原文 §1：「the secret witness is also distributed amongst multiple provers, i.e., no prover knows the full witness」；§4：「the N provers, who have distributed knowledge of the witness vector w, together construct a single proof」。
+- **承诺与链接**：§1 提出「two methods for generating Pedersen-like commitments collaboratively (Section 5.2)」；§5.3 的 `CPlink` 证明「two commitments, with different keys, open to the same vector u (witness)」；§5.4 说明「CPlink guarantees that the element D is a commitment to the same value as the external Pedersen-like commitment c」。
+- **恶意参与者与公开验证**：§5.1 说明知识可靠性对任意数量恶意 Prover 成立；相关实例化继承底层 MPC 的 security-with-abort 条件（如 §5.5 对 collaborative Bulletproofs 写有 `t < N` 与 underlying MPC 的 malicious security）。证明非交互、公开可验证。
+- **实现范围**：§1 / §5.4 / §5.5 实现 collaborative CP-SNARK from LegoGro16 与 collaborative commit-and-prove Bulletproofs；§6 在 Arkworks 中实现模块。
+- **对 T1 的直接影响**：T1 中「分布式 witness 与外部承诺关联」已有直接机制，且有明确 Pedersen-like 承诺适用范围；若要适配数据库承诺，需要工程映射，但当前未见必须新造原语的证据。
+- **仍未解决的应用边界**：不是 SQL、ACL 或 Agent 授权方案；其承诺与证明机制有具体适用范围，不能无条件适配任意数据库承诺。
+
+#### T1 重新拆解
+
+| 原 T1 子问题 | 相关先例 | 当前判断 |
+|---|---|---|
+| 不重构完整 witness 的联合证明 | Collaborative zk-SNARKs | 已有通用原语 |
+| 外部公开验证 | Collaborative zk-SNARKs / PA-MPC | 已有通用原语 |
+| 分布式 witness 与外部承诺关联 | Collaborative CP-NIZK | 已有直接机制，存在适用范围 |
+| 授权输入与实际 MPC 输入绑定 | Authenticated MPC / DPoK | 已有直接机制，Grant 格式仍需适配 |
+| ACL、查询和快照语义 | 有界算术电路 / MPC | 应用关系，尚未证明是独立密码学构造 |
+| 协议外额外数据读取 | 上述工作均不能自动解决 | 独立执行边界问题 |
+
+**边界声明：** 通用原语的存在不等于现成的 Agent 数据库系统；但本提案要主张「独立密码学贡献」，就必须指出这些原语不能覆盖的新密码学环节。原报告没有给出这样的环节。
+
 ---
 
 ## 10. 最终决策
 
-# **HOLD**
+# NO-GO
+
+**范围：本结论仅针对当前 ZK-Agent Query Binding 提案作为独立密码学贡献；不是对 Agent 安全 + 密码学信任机制整个研究方向的 NO-GO。**
 
 **理由：**
 
-- **不是 GO_TO_GATE1**：没有给出一个已完成、可检验、且明确不属于现有组件组合的协议构造；关键证明机制 T1 与证明者信任边界尚未确定。
-- **不是 NO_GO（尚不）**：T1 仍是一个具体、可判定的技术问题；现有六篇工作均未同时给出“Agent Grant 绑定 + ACL/查询参数秘密共享 + 外部公开可验证正确/完整结果 + 无单方重构 witness”的完整构造。也不能把 HOLD 当成“方向必然可行”。
-- **停止条件**：本轮到此结束，不再追加修订轮次，不进入 Gate 1，不实现 Halo2 电路，不新建 benchmark/demo。
+1. 原 T1 的通用密码学问题已有直接先例：Collaborative zk-SNARKs 已支持多方对分布式 witness 联合生成公开可验证证明，并讨论 PA-MPC。
+2. Grant / 认证输入与实际 MPC 输入绑定已有 authenticated MPC / DPoK 机制；Grant 字段适配不是新原语。
+3. 分布式 witness 与外部承诺链接已有 collaborative CP-NIZK 的协作承诺与 `CPlink` 机制，且有明确适用范围。
+4. 将 Grant、ACL、快照和查询执行语义放进有界算术电路并组合上述原语，当前无法构成独立密码学贡献；本提案没有指出这些原语不能覆盖的新密码学环节。
+5. SQL 电路规模、数据库语义和工程性能可能成为系统研究问题，但不能直接当成新的密码学构造；本报告未实现 SQL/ACL 电路，也未给出形式化安全证明。
 
-**若后续允许一次有界判定，唯一应被追问的问题是：**
-
-> 现有 publicly verifiable MPC / distributed proving 是否已经能在不重构秘密共享 witness 的条件下证明 T1 的完整语句？  
-> 若答案是“是”，判 NO_GO；若答案是“否且能指出具体缺口并给出新构造”，才具备 GO 条件。
+**停止条件：** 本轮为最后一次归档修正；到此结束，不进入 Gate 1，不实现 Halo2 电路，不新建 benchmark/demo，不追加新一轮 T1 调研。
 
 ---
 
@@ -322,4 +369,19 @@ Proves:
      - "the correctness of server-side execution is not established by *QC₂*."  
    - 关键定位：System and threat model；Security objectives；Adaptive Query Consensus；Query execution workflow / Scope of QC₂；Conclusion。
 
-**边界复述：** 本报告给出的是协议可行性与增量判定，不是形式化安全证明；没有实现电路、没有运行实验、没有声称 T1 已被解决。
+7. Ozdemir & Boneh, *Experimenting with Collaborative zk-SNARKs: Zero-Knowledge Proofs for Distributed Secrets*, USENIX Security 2022。[全文]
+   - 官方全文 URL：`https://www.usenix.org/system/files/sec22-ozdemir.pdf`
+   - 关键定位：§1 Introduction（distributed witness / MPC-based Prove / four adaptations / three implementations / abort / PA-MPC）；§4 Definition 1 与 Theorem 1（secure-with-abort 阈值继承）；§4.1 PA-MPC from collaborative proofs（auditor need not participate；constant-size proofs）；§6 Implementation；§7 Evaluation。
+   - 关键原文：「public proofs about a secret ⃗w = (w1,...,wN) distributed among N parties」；「run its proof generation algorithm as a secure multi-party computation (MPC) among the N provers」；「The auditor need not participate in this computation, yet it can still check that the claimed output is consistent with commitments to the inputs」。
+
+8. Dutta, Ganesh, Patranabis & Singh, *Compute, but Verify: Efficient Multiparty Computation over Authenticated Inputs*, ASIACRYPT 2024, DOI `10.1007/978-981-96-0938-3_5`。[官方摘要页可核验；本机 PDF 直下 403]
+   - 官方摘要页：`https://eprint.iacr.org/2022/1648`；官方全文 URL：`https://eprint.iacr.org/2022/1648.pdf`
+   - 关键定位：Abstract（authenticated MPC、DPoK、linear secret sharing honest-majority compiler、identifiable abort）；任务包给出的 Shamir 实例 robust 阈值为 `t < n/3`，本机未能直接下载 PDF 正文，故不声称逐行核验该阈值原文。
+   - 关键原文（摘要页）：「a notion of authenticated MPC where the inputs are authenticated, e.g., signed using a digital signature by some certification authority」；「distributed proofs of knowledge」；「a generic and efficient compiler that transforms any linear secret sharing based honest-majority MPC protocol into one with input authentication」。
+
+9. Alghazwi, Bontekoe, Visscher & Turkmen, *Collaborative CP-NIZKs: Modular, Composable Proofs for Distributed Secrets*, International Journal of Information Security, 2026, DOI `10.1007/s10207-026-01209-1`。[开放获取全文]
+   - 官方全文 URL：`https://link.springer.com/article/10.1007/s10207-026-01209-1`；PDF：`https://link.springer.com/content/pdf/10.1007/s10207-026-01209-1.pdf`
+   - 关键定位：§1 Introduction / contributions（distributed witness、collaborative Pedersen-like commitments、LegoGro16、Bulletproofs）；§4 Definition（多 Prover 联合构造单一 proof）；§5.1 Security model；§5.2 Collaborative Pedersen-like commitments；§5.3 Collaborative CPlink；§5.4 Collaborative LegoGro16；§5.5 Collaborative Bulletproofs；§6 Implementation。
+   - 关键原文：「the N provers, who have distributed knowledge of the witness vector w, together construct a single proof」；「CPlink provides a way to prove that two commitments, with different keys, open to the same vector u (witness)」；「CPlink guarantees that the element D is a commitment to the same value as the external Pedersen-like commitment c」。
+
+**边界复述：** 本报告给出的是协议可行性与增量判定，不是形式化安全证明；没有实现电路、没有运行实验、没有声称 T1 已被解决。ARCH-01-R1 的结论是“当前提案作为独立密码学贡献 NO-GO”，不是对 Agent 安全 + 密码学信任机制研究方向的 NO-GO。
