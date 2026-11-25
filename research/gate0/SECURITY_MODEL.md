@@ -1,8 +1,8 @@
 # SECURITY_MODEL.md — Gate 0 统一安全模型
 
-**任务：** ZKQ-00-G0（Gate 0，只读研究审计）
+**任务：** ZKQ-00-G0 + ZKQ-00-G0.1（有限文档校正：ACL 保密对象与查询覆盖范围）
 **日期：** 2026-11-25
-**性质：** 研究模型定义，**不是**安全证明，也**不是**任何系统已满足该模型的结论。
+**性质：** 研究模型定义，**不是**安全证明，也**不是**任何系统已满足该模型的结论。G0.1 仅校正威胁模型口径与裁决措辞，不新增实验、不新增相关工作。
 **证据等级：** 沿用旧仓库冻结基线口径——R0 定义 / R1 源码静态核对 / R2 上阶段实测 / R3 本阶段新实验。本文件主体为 **R0 定义**；引用旧仓库事实时标注其原始等级。
 
 ---
@@ -40,9 +40,9 @@ Gate 0 的任务不是论证候选方向可行，而是判断它是否只是已�
 | Agent / Planner | `A` | **不可信** | 私有授权属性 `attrs_i`（角色、部门、ACL 成员）、签发后的授权证明 | 产生查询请求 / 查询计划；可能受 prompt injection 或被主动攻破；**不持有**签发私钥 |
 | 授权签发方 / Issuer | `I` | **可信** | 策略 `P`、策略版本 `pid`、签名私钥 `sk_I` | 验证 `attrs_i` 与策略后签发 Grant；策略治理 / 版本化属其职责 |
 | 数据所有者 | `DO` | **可信（对数据真实性）** | 原始数据 `D`、承诺随机数 | 产生承诺的数据快照 `[D]` 与 `database_root`；快照是否"最新"不由承诺保证 |
-| 查询服务 / Prover | `S` | **不可信（核心对手）** | 数据快照副本 / 索引、查询执行环境 | 执行 Query、返回 `R` 与查询证明；可能返回错误结果或虚假声明执行行为 |
-| 结果验证方 / Verifier | `V` | **验证逻辑可信，状态可能有限** | `agent_id`、`query_hash`、`policy_id/version`、`database_root`、`R` 的承诺 | 验证授权证明 + 查询证明 + 公共输入一致性，决定接受 / 拒绝结果 |
-| 策略 / ACL 权威 | `PA` | 可信（可与 `I` 合并） | ACL 规则、策略版本历史、撤销状态 | 定义行级 / 字段级访问约束；撤销操作的时间点影响 H2 |
+| 查询服务 / Prover | `S` | **不可信（核心对手）** | 数据快照副本 / 索引、查询执行环境；**是否可见 ACL / 是否持私有 ACL witness 为 G0.1 核心阻断项** | 执行 Query、返回 `R` 与查询证明；可能返回错误结果或虚假声明执行行为 |
+| 结果验证方 / Verifier | `V` | **验证逻辑可信，状态可能有限** | `agent_id`、`query_hash`、`policy_id/version`、`database_root`、`R` 的承诺；目标是不见具体 ACL 规则 | 验证授权证明 + 查询证明 + 公共输入一致性，决定接受 / 拒绝结果 |
+| 策略 / ACL 权威 | `PA` | 可信（可与 `I` 合并） | ACL 规则、策略版本历史、撤销状态；可作为候选 ACL witness holder，但职责未闭合 | 定义行级 / 字段级访问约束；撤销操作的时间点影响 H2；能否在不向 `S` 暴露 ACL 的前提下支撑证明生成未定 |
 
 ---
 
@@ -74,7 +74,7 @@ Gate 0 的任务不是论证候选方向可行，而是判断它是否只是已�
 
 ### 3.1 受保护资产
 1. 未授权记录的内容（机密性）。
-2. 授权属性 / ACL 规则本身（私有 ACL 隐藏目标，H1）。
+2. 授权属性 / ACL 规则本身（私有 ACL 隐藏目标，H1）；**必须先指定隐藏对象：Agent / Verifier、Query Service / Prover，或双方**。
 3. 查询结果的正确性与完整行集合（完整性）。
 4. 授权的新鲜性 / 未撤销性（H2）。
 
@@ -84,11 +84,46 @@ Gate 0 的任务不是论证候选方向可行，而是判断它是否只是已�
 | Query 明文 | 通常可见（本模型不假设查询隐私） | 可见或仅见 `query_hash`，视构造而定 |
 | 访问模式 / 读取了哪些记录 | **可见**（`S` 自己执行） | 需 B/C 证明间接约束 |
 | Agent 私有属性 `attrs_i` | 不应可见 | 目标：隐藏，仅验证满足关系 |
-| ACL 规则 / 行级授权集合 | 不应可见（H1 私有 ACL） | 目标：隐藏，仅验证约束成立 |
+| ACL 规则 / 行级授权集合 | **G0.1 核心模型分叉**：本模型希望隐藏；但 SIGMOD'18 中 SP 明确接收并使用 `Υ_i` | 目标：隐藏，仅验证约束成立；若 `V == 查询用户`，SIGMOD'18 仅对不可访问记录隐藏 ACL，对可访问记录会返回 `Υ` |
 | `agent_id` / `policy_id` / version / nonce / expiry | 依实现 | 公共输入，可见（CVA §5.2 的 `x_PoC`） |
 | `database_root` / `result_commitment` | 可见 | 可见 |
 
 > 查询明文是否对 `S` 隐藏属于**查询隐私**问题（A1/A2/A3 执行模型）。PA-VFANN 的 R0.2.1 审计已独立确认：ASQ 默认是 A1 本地明文检索，`NO VERIFIED QUERY-PRIVATE RETRIEVAL BACKEND`。本 Gate 0 **不重新审计查询隐私**，并明确不把"查询明文对服务不可见"当作本模型已给的前提。若候选方案需要该前提，必须单列阻断项。
+
+### 3.3 ACL 保密对象的三分法（G0.1 修正，必须区分）
+
+"私有 ACL"不是一个单一性质。以下三类不等价，不能互相替证：
+
+| 类型 | 目标 | 含义 | 与 SIGMOD'18 的关系（[原文] + [推论]） |
+|---|---|---|---|
+| **H1-U** | ACL 隐藏于 Agent / 查询用户 / 若 `V` 与用户合并则隐藏于 `V` | 用户不能从 VO 推断不可访问记录的内容、数量或具体失败角色 | **[原文] 支持**。§3 明确威胁是"users are curious"；§3 机密性定义写 "the users ... not know ... specific role(s)"、"the users can gain nothing about D\D+"；§7 Definition 7.5 形式化的是恶意用户区分真实/模拟数据库的能力。 |
+| **H1-S** | ACL 隐藏于 Query Service / Prover | 不可信服务端在生成查询结果与证明时不获知行级 ACL，也不持有 ACL 私有 witness | **[原文] 不支持，且相反**。§3 记录为 `⟨o_i, v_i, Υ_i⟩`，全部记录外包给 SP；Algorithm 1 明示 `Outsource all records ⟨o_i,v_i,Υ_i,σ_i⟩ to the SP`，VO 构造按 `if Υ_oq(A)=1` 分支并以用户角色集 `A` 构造 relaxed proof。SP 可见并使用 ACL。 |
+| **H1-Both** | ACL 同时隐藏于 Agent / Verifier 与 Query Service / Prover | 双方都不见 ACL，同时仍能验证授权约束结果完整性 | **[未核实 / 模型阻断]**。本轮未在已核验来源中发现一个可执行的架构证据；不得把 H1-U 的原文结论改写成 H1-S 或 H1-Both。 |
+
+> **关键勘误：** SIGMOD'18 的 "Zero-Knowledge Confidentiality" 保护的是**用户不获知可访问记录之外的信息**，而不是让 Service Provider 自己对 ACL 不可见。把前者写成"服务端 ACL 隐藏"会改变威胁模型，属于 G0.1 必须纠正的口径错误。
+
+### 3.4 若 `S` 不知道 ACL：证明生成者必须闭合（G0.1 核心模型阻断项）
+
+当前 `SECURITY_MODEL.md` §3.2 要求 ACL 对 `S` 不可见，同时 §1 又把 `S` 设为查询证明的 Prover。二者尚未闭合：
+
+| 架构变体 | 谁持有 ACL / 私有 witness | 谁生成查询完整性证明 | 能否独立由 `S` 生成 | 信任与范围变化 |
+|---|---|---|---|---|
+| **SIGMOD'18 原式** | DO 把 `Υ_i` 随记录交给 SP；用户持角色集 `A` | SP 使用 `Υ_i` 与 `A` 构造 VO | 能，但**因为 SP 看得见 ACL** | 只覆盖 H1-U，不覆盖 H1-S |
+| **S-as-Prover 且 ACL 对 S 隐藏** | 必须由 DO / PA / Issuer 或安全计算环境私下持有 ACL witness | 若仍由 `S` 出证明，需要一种无需看见 ACL 即可满足行级授权约束的证明机制 | **未证可行** | 本轮无原文/源码证据；需说明 witness 如何进入证明而不泄露给 `S`，以及状态新鲜性如何可信获得 |
+| **DO / PA-as-Prover** | DO / PA 持有 ACL 与快照 | DO / PA 生成查询证明；`S` 只传递或执行查询 | 否，`S` 不再是独立 Prover | 信任边界从"不可信查询服务"移到 DO / PA；不再等价于任务包的朴素组合，也不自动覆盖运行时执行行为 |
+| **Issuer-as-Prover / 联合见证** | Issuer 或部分持Attrs/ACL，DB 端仍持快照 | 需要跨方证明生成协议 | **未证可行** | 属新架构问题；本轮只标 UNKNOWN，不声称增量成立 |
+
+### 3.5 G0.1 角色持有数据核对表
+
+| 角色 | 当前 Gate 0 模型持有 | SIGMOD'18 对照 | G0.1 状态 |
+|---|---|---|---|
+| `S` Query Service | 数据快照副本 / 索引、查询执行环境；H1-S 下目标为**不见 ACL** | 接收完整 `⟨o_i,v_i,Υ_i,σ_i⟩`，VO 构造使用 `Υ_i` 与用户角色集 `A` | 与当前模型冲突；不可把 SIGMOD 写成 H1-S 证据 |
+| `V` Verifier | `agent_id`、`query_hash`、`policy_id/version`、`database_root`、`R` 承诺；目标不见具体 ACL | 无独立 `V`；用户验证，且可访问记录的 VO 含 `Υ` | 若 `V` 与用户合并，仅 H1-U 有覆盖；独立 `V` 不可直接套用 |
+| `DO` Data Owner | 原始数据 `D`、承诺随机数；可视为 ACL/策略来源之一 | 生成 ADS/APP 签名并把含 `Υ_i` 的记录外包给 SP | 若改由 DO 出证明，信任边界改变；未在本轮设计为可行方案 |
+| `I` Issuer | 策略 `P`、`pid`、签名私钥 `sk_I`；验证属性并签发 Grant | 无对应 Agent 授权签发方 | 默认不等于行级 ACL witness holder；若兼任需重新定义 trusts |
+| `Prover` | 原模型与 `S` 合并；H1-S 下需说明是否仍为 `S` | SP 是 Prover/VO 生成者，因可见 `Υ_i` 才能工作 | S-as-Prover + ACL 隐藏未证；DO/PA-as-Prover 改变原模型 |
+
+结论：`ACL 对 S 隐藏`与`S 独立生成查询完整性证明`目前不能同时从已核验来源推出。若选择 DO / PA 作为证明者，系统已经不是"不可信查询服务自证查询结果"的原模型；若仍要求 `S` 出证明，则必须补充私有 ACL witness 的持有者、进入证明的路径和相应信任假设。
 
 ---
 
@@ -132,8 +167,8 @@ Gate 0 的任务不是论证候选方向可行，而是判断它是否只是已�
 
 ## 7. 本模型下待判定的三个缺口（任务包 H1/H2/H3，**尚未成立为研究贡献**）
 
-- **H1 私有 ACL 约束下的结果完整性**：能否在不公开 ACL 属性的前提下证明"输出仅含授权记录、授权记录未被遗漏"？须对照 TruthTable / PoneglyphDB / ZkChainDB 已支持的 SQL 算子与承诺机制（`COMPOSITION_ANALYSIS.md` §4）。
-- **H2 策略版本与数据快照的联合一致性**：Grant 绑定 `policy_id/version`，查询证明绑定 `database_root`；授权时刻 `t_auth` 与执行时刻 `t_exec` 之间 ACL / 数据变化时，旧证明能否仍被接受？须对照已有数据库版本 / 撤销机制。
-- **H3 授权约束查询的输出完整性**：查询条件未被扩大、无插入 / 无漏行、投影未越界、LIMIT / 排序未被篡改——须与 CVA（无查询正确性）+ TruthTable / PoneglyphDB / ZkChainDB（有查询正确性）直接对照。
+- **H1 私有 ACL 约束下的结果完整性**：必须先拆为 H1-U（对 Agent / Verifier 隐藏）、H1-S（对 Query Service / Prover 隐藏）与 H1-Both（双方隐藏）。SIGMOD'18 覆盖 H1-U 的 equality / range / join 场景，但**不覆盖** H1-S，因为 SP 接收并使用 `Υ_i`；H1-S 的证明生成者架构未闭合，不能自动认定为研究增量（见 §3.3–§3.4）。
+- **H2 策略版本与数据快照的联合一致性**：Grant 绑定 `policy_id/version`，查询证明绑定 `database_root`；授权时刻 `t_auth` 与执行时刻 `t_exec` 之间 ACL / 数据变化时，旧证明能否仍被接受？须对照已有数据库版本 / 撤销机制。若 `V` 已可信持有当前策略版本、数据根与撤销表，则版本比较与撤销表检查属常规状态机制；仍需证明该当前状态如何可信获得。
+- **H3 授权约束查询的输出完整性**：必须按算子拆分——查询条件、行集合 soundness/completeness、字段投影、LIMIT / 排序、聚合各自标注，不得用"任意 SQL 已覆盖"概括。SIGMOD'18 明确支持 equality / range / join，并把 aggregation 列为 future work；TruthTable / PoneglyphDB / ZkChainDB 的 Query Correctness 也不自动等同于私有 ACL 强制。
 
 三者是否构成"不能由简单组合得到的新性质"，由 `COMPOSITION_ANALYSIS.md` 与 `DECISION.md` 裁决；本文件不预先假定任何一个是真缺口。

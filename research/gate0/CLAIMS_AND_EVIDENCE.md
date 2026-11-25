@@ -1,7 +1,8 @@
 # CLAIMS_AND_EVIDENCE.md — 结论与证据分级
 
-**任务：** ZKQ-00-G0（Gate 0，只读研究审计）
+**任务：** ZKQ-00-G0 + ZKQ-00-G0.1（有限文档校正：ACL 保密对象与查询覆盖范围）
 **日期：** 2026-11-25
+**G0.1 校正说明：** SIGMOD'18 的 Zero-Knowledge 是"对用户隐藏不可访问记录信息"，不是"对 Service Provider / Prover 隐藏 ACL"。本文件已将两者分开，并把 H1 标为 H1-U / H1-S / H1-Both。
 **纪律：** 论文作者自述、源码静态事实、实验可验证事实、我方推论、未核实假设——五类严格分开，不得混用。英文引号内为原文直接引用。
 
 ---
@@ -112,20 +113,34 @@
 ### 5.1 [原文] 三方模型与数据/策略绑定（§3 Problem Definition）
 > "There are three parties in the system: (i) data owner (DO); (ii) service provider (SP); and (iii) users."；每条记录是 `⟨o_i, v_i, Υ_i⟩`，`v_i` 用 CP-ABE 加密，`Υ_i` 是访问策略（单调布尔函数，DNF）；DO 用 ADS 签名全部记录并外包给 SP。
 
-### 5.2 [原文] 授权约束下的结果完整性（直接命中候选 H1/H3）
+> [原文，§3] "All the records are signed by the DO using an authenticated data structure (ADS) and are outsourced to the SP, who answers queries from the users on the behalf of the DO."
+
+> [原文，§3 Threat Model] "Two security threats are considered in this paper: (i) the SP is not fully trusted and it might return tampered or incomplete query results; and (ii) the users are curious and may want to learn the information about the data to which access is unauthorized."
+
+> **[G0.1 关键点]** 威胁模型把 SP 视为完整性对手（可能返回篡改/不完整结果），把用户视为机密性对手（可能推断不可访问数据）。这**不等于**把 SP 视为 ACL 机密性对手。
+
+### 5.2 [原文] 行级授权约束下的结果完整性（命中 H1-U，不命中 H1-S）
+
+> [原文，Algorithm 1] "Outsource all records `⟨o_i, v_i, Υ_i, σ_i⟩` to the SP"；VO Construction 输入为 "Query attribute `o_q`, access role set `A`"，若 "`Υ_oq(A) = 1` then `VO ← ⟨v_oq, σ_oq, Υ_oq⟩`; else `σ̂_oq,A ← ABS.Relax(σ_oq, A\A)`"。
+
+> **[G0.1 关键点]** SP 构造 VO 时直接使用记录策略 `Υ_i` 与用户角色集 `A`。因此该方案中的 Prover/SP **知道并使用 ACL**，其完整性证明不能用来证明"ACL 对 Prover 隐藏"。
 > "Using the VO, the user should establish the soundness and completeness of a result set RS: **Soundness.** No records in RS are tampered with and are truly the results with respect to the roles of the user. **Completeness.** All records not in RS are either non-results or are inaccessible to the user."
 
 > §7.2 Definition 7.4 (Unforgeability)：恶意 SP 成功的条件包括 "The result set RS contains a record ... such that o* does not satisfy the query q or Υ*(A)=0" 以及 "There exists a record ⟨oj,vj,Υj⟩ not in RS, such that ... oj satisfies the query q, and Υj(A)=1"——即同时禁止插入越权行与遗漏授权行。
 > §7.2 Theorem 7.6："Our proposed query authentication algorithms satisfy the security properties of Unforgeability (Definition 7.4) and Zero-Knowledge (Definition 7.5)."
 
-### 5.3 [原文] 私有 ACL / 零知识机密性（直接命中候选 H1 "Private ACL"）
+### 5.3 [原文] 私有 ACL / 零知识机密性（仅命中 H1-U，不能写成 H1-S）
 > §3 三级机密性，最强级："Zero-Knowledge Confidentiality. Any information beyond the accessible records D+ in the database D is protected. That is, the users can gain nothing about D\D+ (e.g., not even its size or the associated access policies)."
 > §7.2 Definition 7.5 (Zero-Knowledge)：Ideal game 中不可访问记录被替换为 `⟨o_i, random, Role_∅⟩`；"by achieving the zero-knowledge confidentiality, the data content confidentiality and access policy confidentiality are automatically guaranteed."
+> §7.2 Definition 7.5 后原文："This property ensures that a **malicious user** could extract any information regarding the database beyond accessible records with at most a negligible probability."
+
+> **[G0.1 关键点]** 上述定义的保密受益方是 `users`，不是 `SP`。它保证恶意用户不能从 VO 推断不可访问记录的信息；它不保证 SP 不知道 `Υ_i`。对可访问记录，Algorithm 1 反而把 `Υ_oq` 放入 VO。故只能写：**SIGMOD'18 覆盖 H1-U 中对不可访问记录的 ACL 隐藏**，不能写"覆盖服务端 ACL 隐藏"。
 
 ### 5.4 [原文] 明确的未覆盖边界
 - §11 Conclusion future work："we plan to extend the proposed techniques to support more complex queries, such as aggregation"；"multi-source data in a distributed environment"。
 - [源码/文本统计] 全文 `update` / `revocation` 关键词命中为 0；无 Agent、无独立授权请求证明（无 agent_id / grant / policy version）、无执行时证据。
-- **[推论]** SIGMOD'18 已给出"私有 ACL 约束下查询结果 soundness + completeness + 零知识"的一体化密码学方案（APP 签名 + ABS + CP-ABE + ADS），其威胁模型是"SP 不完全可信 + 用户好奇"——与候选 H1 的目标性质高度重合。差别在：**没有 Agent 授权请求/上下文/策略版本绑定，也没有撤销/动态更新**，因此 H2（策略版本与快照联合一致性）在此文中仍未解决。
+- **[推论，G0.1 修正]** SIGMOD'18 已给出"**对用户隐藏不可访问记录信息**的私有 ACL 查询结果 soundness + completeness + 零知识"一体化方案（APP 签名 + ABS + CP-ABE + ADS），其威胁模型是"SP 不完全可信以破坏完整性 + 用户好奇以破坏机密性"。因此它覆盖 **H1-U**，并与候选目标在用户侧高度重合；但**不覆盖 H1-S**：SP 接收并使用 `Υ_i`，且原文未定义"SP 不知道 ACL 时由谁持有 witness、由谁生成证明"。
+- **[推论]** SIGMOD'18 明确未覆盖 Agent 授权请求 / 上下文 / 策略版本绑定、撤销 / 动态更新、独立 Verifier 模型与运行时执行证据；aggregation 是 future work。故 H2（策略版本与快照联合一致性）与 H3 的投影 / LIMIT / 排序 / 聚合维度在此文中仍未解决。
 
 ---
 

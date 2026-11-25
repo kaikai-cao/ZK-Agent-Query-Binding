@@ -1,10 +1,11 @@
 # Gate 0 — 授权绑定的可验证查询结果：研究增量与可行性核验
 
-**任务：** ZKQ-00-G0（Gate 0 — Related Work & Novelty Feasibility）
+**任务：** ZKQ-00-G0 + ZKQ-00-G0.1（ACL 保密对象与查询覆盖范围校正）
 **项目：** ZK-Agent Query Binding
 **执行日期：** 2026-11-25
-**任务性质：** 只读研究审计 + 文档交付（**不**写电路、**不**实现查询引擎、**不**生成证明、**不**复制旧仓库代码）
-**工作分支：** `research/g0-related-work-audit`
+**任务性质：** 只读研究审计 + 有限文档校正（**不**写电路、**不**实现查询引擎、**不**生成证明、**不**复制旧仓库代码）
+**G0 分支 / HEAD：** `research/g0-related-work-audit` @ `afe0a3abdb890f117c910a3d3abfab85a78ca1a7`
+**G0.1 分支：** `research/g0-privacy-audience-correction`（从 G0 HEAD 新建）
 **最终裁决：** **HOLD**（详见 `DECISION.md`）
 
 ---
@@ -72,8 +73,8 @@ research/gate0/
 
 ### 4.2 最重要的三项已有工作对比
 
-1. **SIGMOD'18（全文）** — 已在 2018 年用 APP 签名 + ABS + CP-ABE + ADS 同时实现"行级细粒度 ACL + 查询结果 soundness & completeness（Def 7.4）+ 零知识机密性（Def 7.5：连不可访问记录的数量与策略都不泄露）"。**直接覆盖候选 H1（私有 ACL 下结果完整性）与 H3。**
-2. **TruthTable（源码）** — verifier 指定 Query、proof 结构性绑定 query（5 类替换全拒）、全套 SQL 算子；授权语义源码零命中。**直接覆盖性质 B；把 Grant 绑到其 Query 是常规组合。**
+1. **SIGMOD'18（全文，G0.1 校正）** — 用 APP 签名 + ABS + CP-ABE + ADS 实现"行级 ACL + 结果 soundness & completeness（Def 7.4）+ 对用户零知识机密性（Def 7.5：不可访问记录的数量与策略不泄露）"。它覆盖 **H1-U** 与 equality/range/join 的部分 H3；**不覆盖 H1-S**，因为 SP 明确接收并使用 `Υ_i`。aggregation 是 future work。
+2. **TruthTable（源码）** — verifier 指定 Query、proof 结构性绑定 query（5 类替换全拒）、全套 SQL 算子；授权语义源码零命中。**覆盖性质 B；把 Grant 绑到其 Query 是常规组合；不等于私有 ACL 强制。**
 3. **CVA（全文 + 源码）** — 作者自己在 §4.5 明确 `VerifyAuth=1 ⇏ q_exec=q_auth`，PoC 中 context binding / runtime execution binding 均为 Open。**授权层基线，不提供任何查询结果保证。**
 
 ### 4.3 朴素组合是否足够 — 明确结论
@@ -83,19 +84,20 @@ research/gate0/
 ### 4.4 具体反例
 
 - **R1（形式化推理）**：策略撤销后旧 Grant + 旧快照 root 仍能让两层证明通过、Verifier 接受本应被拒的查询 —— 指向 H2。
-- **R2（推论）**：私有 ACL 结果完整性已被 SIGMOD'18 覆盖，不是缺口。
+- **R2（推论，G0.1 修正）**：H1-U（对用户隐藏 ACL 的结果完整性）已被 SIGMOD'18 覆盖；H1-S（对 Query Service / Prover 隐藏 ACL）未被覆盖，但证明生成者架构未闭合，不能直接判为新增量。
 - **R3（推理）**：实际执行行为虚假声明 —— 旧仓库 E2.2 冻结实验（R2，10/10，UER=1.0）已实证纯签名回执无法得到 Runtime Execution Binding；ZK SQL 查询证明只证明"某查询的正确执行"，不证明"没执行其他查询"。
 
 ### 4.5 最终裁决：HOLD（不进入 Gate 1）
 
-- **不是 NO_GO**：ZkChainDB 正文不可得，H2 是否已覆盖属 UNKNOWN，不能把"尚未找到"写成"已证明不存在"。
-- **不是 GO**：未找到"不是简单组合、现有工作论文+源码均不能满足"的可形式化性质；H2 的修补看起来是业务层版本比较 + 撤销表，无新密码学约束。
-- **三个具体阻断项 B1/B2/B3** 及各自闭合所需证据见 `DECISION.md` §5；均可由有限工作闭合。
+- **不是 NO_GO**：H1-S 的 ACL witness / Prover 架构未闭合但未被证明不可行；ZkChainDB 正文不可得，H2 是否已覆盖属 UNKNOWN。不能把"尚未找到"写成"已证明不存在"。
+- **不是 GO**：SIGMOD'18 已覆盖 H1-U 的主要场景；H1-S 尚无可执行架构证据；H2 的修补看起来是业务层版本比较 + 撤销表；H3 必须按算子逐项标注，不能据现有材料主张新增量。
+- **三个具体阻断项 B1/B2/B3** 及各自闭合所需证据见 `DECISION.md` §5；G0.1 将 **B1 更新为核心模型阻断项（ACL 保密对象 + Prover/witness 架构）**。
 
 ---
 
 ## 5. 执行边界与提交
 
-- 本轮所有修改限于 `research/gate0/`，未修改 scripts / evidence 之外任何文件、未改其他仓库或分支。
-- 精确 `git add` 上述 8 个文件，在 `research/g0-related-work-audit` 分支提交并推送；核验远端 SHA；main 未修改；不建 PR、不合并、不启动 Gate 1。
+- G0 原始提交仅修改 `research/gate0/` 下 8 个文件并推送 `research/g0-related-work-audit`。
+- G0.1 修正仅修改允许的 `research/gate0/` 文档（README / SOURCE_MANIFEST / RELATED_WORK_MATRIX / CLAIMS_AND_EVIDENCE / SECURITY_MODEL / COMPOSITION_ANALYSIS / DECISION）；`evidence/source_manifest.json` 未发现元数据错误，故未改动。
+- G0.1 在 `research/g0-privacy-audience-correction` 分支提交并推送；核验远端 SHA；main 与 G0 分支未修改；不建 PR、不合并、不启动 Gate 1。
 - 提交与远端核验结果见交付报告。

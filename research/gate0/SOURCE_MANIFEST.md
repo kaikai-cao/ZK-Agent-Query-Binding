@@ -1,7 +1,7 @@
 # SOURCE_MANIFEST.md — Gate 0 原始来源清单
 
-**任务：** ZKQ-00-G0（Gate 0，只读研究审计）
-**访问日期：** 2026-11-25
+**任务：** ZKQ-00-G0 + ZKQ-00-G0.1（有限文档校正：ACL 保密对象与查询覆盖范围）
+**访问日期：** 2026-11-25（G0.1 于同日重新核对 S11 全文）
 **纪律：** 论文原文优先于摘要；代码优先于 README；无法获取的来源明确标注 BLOCKED / UNKNOWN，不得推测。英文引号内为原文，其余为中文说明。
 
 ---
@@ -24,7 +24,7 @@
 | S12 | agent-exec-binding-mvp（旧仓库） | 代码/文档 | 本地只读 | **VERIFIED（R1/R2）** |
 | S13 | pa-vfann-experiment（旧仓库） | 文档 | 本地只读 | **VERIFIED（仅记录相关内容）** |
 
-> S11 是本轮补充搜索发现的最相关先例，因直接覆盖候选的 H1（私有 ACL + 结果完整性）而加入矩阵；来源为 ACM SIGMOD 2018，DOI 10.1145/3183713.3183741。
+> S11 是本轮补充搜索发现的最相关先例，因覆盖候选的 **H1-U**（对用户隐藏 ACL 的行级授权结果完整性）而加入矩阵；G0.1 已校正：它**不覆盖 H1-S**（对 Query Service / Prover 隐藏 ACL）。来源为 ACM SIGMOD 2018，DOI 10.1145/3183713.3183741。
 
 ---
 
@@ -117,14 +117,16 @@
 - **发表：** Proceedings of 2018 International Conference on Management of Data (SIGMOD'18)，16 页
 - **DOI / 地址：** https://doi.org/10.1145/3183713.3183741 ；PDF（作者主页）http://www.comp.hkbu.edu.hk/~xujl/Papers/sigmod18_auth.pdf
 - **本地证据文件：** `$TEMP/gate0-src/sigmod18_auth.pdf`（1,246,855 bytes）、`$TEMP/gate0-src/sigmod18_auth.txt`（99,849 chars，pypdf 提取）
+- **G0.1 复核来源：** 作者主页 PDF `https://xuc.me/file/paper/SIGMOD18.pdf`（2026-11-25 重新下载全文核对，仅用于校正同一论文的章节口径，不新增来源记录）
 - **精读章节：** §3 Problem Definition、§5 Equality Query Authentication、§7 Security Analysis、§9 Relaxing Zero-Knowledge、§11 Conclusion
 - **核验状态：** **VERIFIED（全文 PDF，16 页）**
 - **已核验事实（原文，见 CLAIMS_AND_EVIDENCE.md）：**
-  - 三方模型（DO / SP / users），记录 `<o_i, v_i, Υ_i>`，CP-ABE 加密内容 + APP 签名认证；
+  - 三方模型（DO / SP / users），记录 `<o_i, v_i, Υ_i>`，CP-ABE 加密内容 + APP 签名认证；**G0.1 确认完整记录（含 `Υ_i`）外包给 SP，Algorithm 1 由 SP 使用 `Υ_oq(A)` 构造 VO**；
   - 安全定义同时含 **Soundness**（结果未被篡改、且符合用户角色）与 **Completeness**（未返回记录要么非结果、要么对该用户不可访问）——即"授权约束下的结果完整性"；
-  - 三级机密性：**Data Content / Access Policy / Zero-Knowledge**，其中 Zero-Knowledge = "users can gain nothing about D\D+ (e.g., not even its size or the associated access policies)"；
+  - 三级机密性：**Data Content / Access Policy / Zero-Knowledge**，其中 Zero-Knowledge = "users can gain nothing about D\D+ (e.g., not even its size or the associated access policies)"；**G0.1 确认其保密受益方是 users，不是 SP**；
   - Definition 7.4 Unforgeability、Definition 7.5 Zero-Knowledge、Theorem 7.6（证明见附录）；
-  - **明确未覆盖：** 全文 `update` / `revocation` 命中为 0；aggregation 列为 future work；无 Agent、无独立授权请求证明、无执行时证据。
+  - **G0.1 覆盖口径：** 覆盖 H1-U（对用户/合并 V 隐藏不可访问记录的 ACL 信息）与 equality/range/join 的行级结果完整性；**不覆盖 H1-S**（对不可信 SP/Prover 隐藏 ACL）；
+  - **明确未覆盖：** 全文 `update` / `revocation` 命中为 0；aggregation 列为 future work；无 Agent、无独立授权请求证明、无独立 V 模型、无执行时证据。
 
 ## 12. S12 — agent-exec-binding-mvp（旧仓库，只读）
 

@@ -1,16 +1,19 @@
 # COMPOSITION_ANALYSIS.md — 朴素组合是否足够
 
-**任务：** ZKQ-00-G0（Gate 0，只读研究审计）
+**任务：** ZKQ-00-G0 + ZKQ-00-G0.1（有限文档校正：ACL 保密对象与查询覆盖范围）
 **日期：** 2026-11-25
+**G0.1 校正说明：** 本文件不再笼统写"私有 ACL 已被覆盖"；改为区分 H1-U（对 Agent / 用户 / 合并 V 隐藏）与 H1-S（对 Query Service / Prover 隐藏）。
 **核心问题：** "Authorization 证明 + ZK SQL 查询证明"是否只是已有两类工作的简单组合？共享 `query_hash` 是否已经足够？
 
 ---
 
 ## 0. 结论先行
 
-> **[推论] 朴素组合（共享 query_hash 的公共输入相等性检查）在密码学上是直接的、常规的组件组合，本身不构成研究增量。** 它能得到的性质是"授权声明与查询证明指向同一 query 字符串"+"该 query 在承诺 DB 上被正确执行"；它**不能**得到"实际执行行为被约束"（性质 C），也不能自动得到"ACL 私有且行级强制"（H1）与"策略版本/快照版本联合一致"（H2）。
+> **[推论] 朴素组合（共享 query_hash 的公共输入相等性检查）在密码学上是直接的、常规的组件组合，本身不构成研究增量。** 它能得到的性质是"授权声明与查询证明指向同一 query 字符串"+"该 query 在承诺 DB 上被正确执行"；它**不能**得到"实际执行行为被约束"（性质 C），也不能自动得到"ACL 对所有相关方私有且行级强制"（H1）与"策略版本/快照版本联合一致"（H2）。
 
-> **[推论] 唯一可能构成增量的是 H2 中"授权时刻策略版本与执行时刻快照版本的联合一致性 + 撤销后旧证明失效"这一具体缺口**——但它尚无证据表明现有机制无法解决（ZkChainDB 正文 BLOCKED、SIGMOD'18 无动态更新但属 2018 年外包 DB 模型而非 Agent 授权模型）。按任务包裁决规则，缺关键证据 → 不是 GO。
+> **[G0.1 修正]** H1 必须拆开：SIGMOD'18 已覆盖 **H1-U**（对查询用户隐藏不可访问记录的 ACL），但不覆盖 **H1-S**（对不可信 Query Service / Prover 隐藏 ACL）。若当前模型坚持 ACL 对 `S` 不可见，则必须先回答"谁持有 ACL witness、谁生成查询完整性证明、`S` 能否独立生成"。该架构尚未闭合，因此 H1-S **不是已证研究增量**，而是核心模型阻断项。
+
+> **[推论] 除 H1-S 的模型分叉外，唯一可能构成具体可形式化增量的是 H2 中"授权时刻策略版本与执行时刻快照版本的联合一致性 + 撤销后旧证明失效"**——但它尚无证据表明现有机制无法解决（ZkChainDB 正文 BLOCKED、SIGMOD'18 无动态更新但属 2018 年外包 DB 模型而非 Agent 授权模型）。按任务包裁决规则，缺关键证据 → 不是 GO。
 
 ---
 
@@ -53,7 +56,7 @@ Verifier:
 | # | 性质 | 共享 hash 是否足够 | 具体反例 / 理由 |
 |---|---|---|---|
 | 1 | 实际执行行为（C） | **否** | 旧仓库 E2.2（R2，10/10）：恶意服务实际执行 Finance 查询，却提交 `query_hash=Sales` 的授权证明 + 一份针对 Sales query 的查询证明；它可以选择只对 Sales query 生成诚实 π_query（此时返回的是 Sales 结果，与授权一致，无越权）；**或**返回 Finance 结果并伪造一个"针对 Sales query 的 π_query"——后者在 SNARK 可靠下不可行，但前者说明组合只能约束"被证明的那个 query"，**不能约束服务私下的额外读取**。查询证明本身也不覆盖"服务是否额外读了未授权记录"。 |
-| 2 | 私有 ACL 行级强制（H1） | **否（但已有工作覆盖）** | 标准 ZK SQL 证明的 query 是 verifier 指定的任意 SQL，可以写成 `SELECT ... WHERE acl_predicate`，从而"证明结果满足 ACL 条件"；但 predicate 与 ACL 在证明中是**公开**的（公共输入或电路常量）。若要求"ACL 属性不公开"，共享 hash 无能为力。**但** SIGMOD'18（全文已核验）已用 APP 签名 + ABS + CP-ABE + ADS 给出零知识机密性下的行级 ACL 结果 soundness + completeness（Definition 7.4/7.5、Theorem 7.6），直接覆盖这一缺口。 |
+| 2 | 私有 ACL 行级强制（H1-U / H1-S） | **否；且必须拆分对象** | 标准 ZK SQL 证明的 query 是 verifier 指定的任意 SQL，可以写成 `SELECT ... WHERE acl_predicate`，从而"证明结果满足 ACL 条件"；但 predicate 与 ACL 在证明中是**公开**的（公共输入或电路常量），共享 hash 无能为力。**H1-U**：SIGMOD'18 用 APP 签名 + ABS + CP-ABE + ADS 给出对用户零知识的行级 ACL 结果 soundness + completeness（Def 7.4/7.5、Theorem 7.6），已覆盖 equality/range/join 场景。**H1-S**：SIGMOD'18 的 SP 明确接收并使用 `Υ_i`，不覆盖；若 `S` 不知 ACL，本轮未找到可执行的证明生成架构，不能把这写成新增量。 |
 | 3 | 策略版本 / 快照版本联合一致（H2） | **否（关键候选缺口）** | 授权时刻 `t_auth` 策略版本 `pid_k`，执行时刻 `t_exec` 数据快照 `root_m`。若 `pid_k` 已被撤销、或 `root_m` 是撤销前的旧快照，两层证明的 hash 相等性检查**不比较** `pid` 与 `root` 的时序一致性。反例：Issuer 在 v1 策略下签发 Grant（允许 Sales），随后策略升级为 v2（禁止 Sales），恶意服务在 v2 生效后仍用 v1 Grant + 撤销前快照 root_old 生成 π_query 与 π_auth；两个 proof 都验证通过，共享 hash 相等，Verifier 接受本应被撤销的查询。**这是朴素组合确实缺失的语义。** |
 | 4 | Grant 新鲜度 / 撤销后旧证明失效 | **否（同上反例）** | nonce/expiry 是 CVA 层公共输入，π_query 层不绑定它们；即使 Grant 过期，只要 Verifier 不主动检查 expiry，查询证明仍可被复用。需额外状态（nonce set / 撤销列表）——属**业务逻辑**，不是密码学新约束；CVA §5.2 已明确"replay resistance enforced externally by the gateway"。 |
 
@@ -67,6 +70,19 @@ Verifier:
 - CVA §4.5 已明说执行时信任锚是**开放问题**，不由 ZKP 授权层提供；
 - 现有数据库版本机制（如 Merkleized state + 版本 root）和撤销列表（业务状态）**可以直接实现**"比较版本号 + 查撤销表"，无需新密码学约束；把两个版本号放进公共输入做相等性检查也是常规组合；
 - ZkChainDB 摘要显示其验证针对 "committed dataset state"，可能已含快照版本绑定，但**正文 BLOCKED，无法核实**。
+
+### 4.4 H1-S 的证明生成者闭合性（G0.1 新增）
+
+若把候选目标从 H1-U 改成 H1-S，朴素组合不再只是"共享 query_hash"，而是引入新的架构问题：
+
+| 变体 | ACL witness 持有者 | Prover | 是否覆盖 H1-S | 判定 |
+|---|---|---|---|---|
+| SIGMOD'18 原式 | DO 将 `Υ_i` 随记录交给 SP；用户持角色集 | SP | 否 | 已核验原文，SP 可见并使用 ACL |
+| S-as-Prover + ACL 对 S 隐藏 | 未定（DO / PA / Issuer / MPC / TEE） | 仍为 `S` | 未证 | 需要解释私有 witness 如何进入约束而不泄露给 `S`；本轮无证据 |
+| DO / PA-as-Prover | DO / PA | DO / PA | 可能改变信任边界 | 不再是"不可信查询服务自证查询结果"的原模型；也不自动得到运行时执行绑定 |
+| Issuer-as-Prover / 跨方协议 | 多方分片 | 多方联合 | UNKNOWN | 属新协议设计，本轮只记录，不声称可行 |
+
+因此，H1-S 当前是**模型未闭合问题**：不能因为 SIGMOD'18 覆盖 H1-U 就判 NO_GO，也不能因为"S 看不见 ACL"听起来更难就判 GO_TO_GATE1。闭合该问题至少需要：ACL witness 持有者、证明生成者、公共输入/私有 witness 边界、对 `S` 的泄露定义，以及当前策略/数据状态如何可信获得。
 
 ---
 
@@ -86,8 +102,8 @@ Verifier: verify(π_auth)=1（v1 下确实授权），verify(π_query)=1（R 是
 不需要新的密码学原语。
 ```
 
-**反例 R2 — 私有 ACL 下的结果完整性（针对 H1，说明为何不是缺口）：**
-若 verifier 指定 `Q = SELECT id FROM t WHERE acl_ok(user_attrs, row.acl) = 1`，则 ZK SQL 证明直接给出"结果只含授权行、且所有授权行都在结果中"（SIGMOD'18 Def 7.4 的 soundness+completeness 语义等价物）。若要求 `acl_ok` 的输入属性保密，SIGMOD'18 的 ABS + CP-ABE 已实现零知识机密性。**因此 H1 不是一个"现有方案未覆盖"的缺口**——除非引入"Agent 私有授权属性 + 动态 ACL 撤销"的组合，那又回到 H2。
+**反例 R2 — 私有 ACL 下的结果完整性（G0.1 修正：只对 H1-U 说明为何不是缺口）：**
+若 verifier 指定 `Q = SELECT id FROM t WHERE acl_ok(user_attrs, row.acl) = 1`，则 ZK SQL 证明直接给出"结果只含授权行、且所有授权行都在结果中"（SIGMOD'18 Def 7.4 的 soundness+completeness 语义等价物）。若要求对用户保密 `acl_ok` 的输入属性/不可访问记录策略，SIGMOD'18 的 ABS + CP-ABE 已实现零知识机密性。**因此 H1-U 不是一个"现有方案未覆盖"的缺口**；但这条推理**不能**推广到 H1-S：SIGMOD'18 的 Prover/SP 看得见 `Υ_i`。若引入"ACL 对 S 隐藏 + S 仍生成完整性证明"，证明生成者架构未闭合；若引入"动态 ACL 撤销"，则回到 H2。
 
 **反例 R3 — 执行行为虚假声明（针对 C，说明为何查询结果证明不够）：**
 旧仓库 E2.2（R2）：服务实际读取 Finance 行，但提交一个"针对 Sales query、在 DB 上的正确结果"的 π_query（返回 Sales 结果）并同时提交 π_auth。**结果本身在授权范围内**——客户拿到的是合法 Sales 数据。服务的违规行为是"私下多读了 Finance"；π_query 的存在无法证明它没多读（ZK SQL 证明证明的是"某查询的正确执行"，不是"没执行其他查询"）。这是查询隐私/访问模式问题，属 PA-VFANN R0.2.1 已记录的 A1/A2/A3 执行模型边界，不是本方向的新增量。
@@ -103,7 +119,8 @@ Verifier: verify(π_auth)=1（v1 下确实授权），verify(π_query)=1（R 是
 | Query Result Correctness (B) | **可直接获得** | TruthTable / PoneglyphDB / ZkChainDB 已实现 |
 | Result Completeness（相对公开 query） | **可直接获得** | 同上 |
 | ACL Enforcement（公开 ACL 表达为 WHERE） | **可直接获得** | 写进 query 即可，非新机制 |
-| Private ACL（H1） | **已有 SIGMOD'18 覆盖** | 不构成增量 |
+| Private ACL（H1-U：对用户 / 合并 V） | **已有 SIGMOD'18 覆盖（equality/range/join）** | 不构成增量 |
+| Private ACL（H1-S：对 Query Service / Prover） | **SIGMOD'18 未覆盖；架构未闭合** | 模型阻断项，不是已证增量 |
 | Runtime Execution Binding (C) | **缺失，但组合无法解决** | CVA 明说需执行时信任锚；E2.2 实证 |
 | Policy/Snapshot 联合一致 + 撤销（H2） | **缺失，候选缺口** | 但可用业务层版本比较 + 撤销表解决，无新密码学约束；ZkChainDB 正文未知 |
 | 查询隐私 / 访问模式隐藏 | **缺失，不属本方向** | 属 PA-VFANN A3 后端问题 |
@@ -117,7 +134,7 @@ Verifier: verify(π_auth)=1（v1 下确实授权），verify(π_query)=1（R 是
 2. **是否只需要公共输入相等性检查？** —— 对请求同一性，是；对 H1/H2/C，否。
 3. **数据库证明已保证输出正确，额外 Agent 证明增加了什么？** —— 增加"主体/策略/上下文/新鲜度的授权关系"，即性质 A；不增加查询侧任何保证。
 4. **Grant 的 Query Hash 与 TruthTable 的 Query 绑定是否只是常规组合？** —— **是**。这是把 CVA 的 `h_plan` 与 TruthTable 的 Query 公共输入设为同一值，无需新电路约束。
-5. **是否存在不能由简单组合解决的安全问题？** —— 唯一候选是 H2 联合一致性 + 撤销；但其可通过业务层版本检查解决，且 ZkChainDB 正文不可得无法排除已有方案；按裁决规则不能判 GO。性质 C 虽不能由组合解决，但它是 CVA 明说的开放问题且需执行时信任锚（不在本任务"可验证查询结果"范围内），强行纳入会构成"不现实的威胁模型/范围扩张"。
+5. **是否存在不能由简单组合解决的安全问题？** —— 有两个分叉，但都不能直接判 GO：① **H1-S**（ACL 对不可信 Prover 隐藏仍要证明行级授权结果）：SIGMOD'18 不覆盖，且"S 不知 ACL 时谁持 witness、谁出证明"未闭合，属核心模型阻断项；② **H2** 联合一致性 + 撤销：可通过业务层版本检查解决，且 ZkChainDB 正文不可得无法排除已有方案。性质 C 虽不能由组合解决，但它是 CVA 明说的开放问题且需执行时信任锚（不在本任务"可验证查询结果"范围内），强行纳入会构成"不现实的威胁模型/范围扩张"。
 
 ---
 
